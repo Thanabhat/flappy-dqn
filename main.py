@@ -1,107 +1,30 @@
 # Source code for screen capturing and clicking from:
 # http://code.tutsplus.com/tutorials/how-to-build-a-python-bot-that-can-play-web-games--active-11117
 
-import sys
-
-sys.path.insert(0, 'C:\Program Files (x86)\Python35-32\lib\site-packages')
-
-# import os
 import time
 from PIL import ImageGrab, Image
-import win32api, win32con
-import numpy as np
 import convnetpy.deepqlearn
 # import matplotlib.pyplot as plt
-
-## http://flappy-generator.com/?id=572e177e5d02a
-X_PAD = 247
-Y_PAD = 178
-GAME_WIDTH = 467
-GAME_HEIGHT = 622
-
-## http://flappybird.io/
-# X_PAD = 105
-# Y_PAD = 203
-# GAME_WIDTH = 480
-# GAME_HEIGHT = 640
+from game_utils import FlappyGeneratorGame, FlappyBirdIO
+from IOUtilsWin import IOUtilsWin
 
 INPUT_SIZE = (60, 60)
 TEMPORAL_WINDOW = 1
 NUM_ACTIONS = 2
 
+game = FlappyGeneratorGame()
+# game = FlappyBirdIO()
+io_utils = IOUtilsWin(game.screen_info['X_PAD'], game.screen_info['Y_PAD'])
 
-def screenGrab():
-    box = (X_PAD, Y_PAD, X_PAD + GAME_WIDTH, Y_PAD + GAME_HEIGHT)
+
+def screenGrab(screen_info):
+    box = (screen_info['X_PAD'],
+           screen_info['Y_PAD'],
+           screen_info['X_PAD'] + screen_info['GAME_WIDTH'],
+           screen_info['Y_PAD'] + screen_info['GAME_HEIGHT'])
     image = ImageGrab.grab(box)
     # im.save(os.getcwd() + '\\full_snap__' + str(int(time.time())) + '.png', 'PNG')
     return image
-
-
-def isEndFlappyBirdGenerator(image):
-    ## http://flappy-generator.com/
-
-    # check not white
-    cnt_white = 0
-    cnt_all = 0
-    for x in range(206, 258):
-        for y in range(33, 80):
-            color = image.getpixel((x, y))
-            if color[0] >= 245 and color[1] >= 245 and color[2] >= 245:
-                cnt_white += 1
-            cnt_all += 1
-    if 1.0 * cnt_white / cnt_all < 0.3:
-        return True
-
-    # check score appear
-    color = np.zeros((3))
-    cnt = 0
-    for x in range(225, 230):
-        for y in range(198, 203):
-            color = np.add(color, image.getpixel((x, y)))
-            cnt += 1
-    color /= cnt
-    if color[0] >= 245 and color[1] >= 245 and color[2] >= 245:
-        return True
-    return False
-
-
-def isEndFlappyBirdIO(image):
-    ## http://flappybird.io/
-    color = np.zeros((3))
-    cnt = 0
-    for x in range(106, 110):
-        for y in range(367, 371):
-            color = np.add(color, image.getpixel((x, y)))
-            cnt += 1
-    color /= cnt
-    if color[0] >= 220 and color[0] < 250 \
-            and color[1] >= 90 and color[1] < 110 \
-            and color[2] >= 0 and color[2] < 15:
-        return True
-    return False
-
-
-def restart():
-    time.sleep(0.5)
-    mousePos((110, 370))
-    leftClick()
-    time.sleep(0.5)
-    fly()
-
-
-def fly():
-    mousePos((10, 10))
-    leftClick()
-
-
-def leftClick():
-    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0)
-    time.sleep(.1)
-    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
-
-
-def mousePos(cord):
-    win32api.SetCursorPos((X_PAD + cord[0], Y_PAD + cord[1]))
 
 
 def buildDeepQNetwork():
@@ -126,15 +49,15 @@ def buildDeepQNetwork():
     # layer_defs.append({'type': 'fc', 'num_neurons': 256, 'activation': 'relu'})
     # layer_defs.append({'type': 'regression', 'num_neurons': NUM_ACTIONS})
 
-    tdtrainer_options = {'learning_rate': 0.01, 'momentum': 0.0, 'batch_size': 64, 'l2_decay': 0.0}
+    tdtrainer_options = {'learning_rate': 0.01, 'momentum': 0.0, 'batch_size': 3, 'l2_decay': 0.0}
 
     opt = {}
     opt['temporal_window'] = TEMPORAL_WINDOW
     opt['experience_size'] = 30000
-    opt['start_learn_threshold'] = 1000
+    opt['start_learn_threshold'] = 10
     opt['gamma'] = 0.9
-    opt['learning_steps_total'] = 10000
-    opt['learning_steps_burnin'] = 1000
+    opt['learning_steps_total'] = 100
+    opt['learning_steps_burnin'] = 10
     opt['epsilon_min'] = 0.01
     opt['epsilon_max'] = 1.0
     # opt['learning_steps_total'] = 200000
@@ -171,8 +94,8 @@ def main():
     cnt = 0
     brain = buildDeepQNetwork()
     while True:
-        image = screenGrab()
-        is_end = isEndFlappyBirdGenerator(image)
+        image = screenGrab(game.screen_info)
+        is_end = game.isEnd(image)
         # print(is_end)
         if is_end:
             # brain.backward(-1000)
@@ -180,7 +103,7 @@ def main():
             print("Training...")
             brain.train()
             # brain.clearExperience()
-            restart()
+            io_utils.restart()
             cnt += 1
             print("#### Game %d ####" % cnt)
             if cnt == N_GAME:
@@ -191,7 +114,7 @@ def main():
         action = brain.forward(input_list)
         # print('action=%d' % action)
         if action == 0:
-            fly()
+            io_utils.fly()
         time.sleep(0.3)
 
 
